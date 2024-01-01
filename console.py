@@ -1,164 +1,195 @@
 #!/usr/bin/python3
-""" console """
-
-import cmd
-from datetime import datetime
-import models
-from models.amenity import Amenity
+"""The Console Module"""
 from models.base_model import BaseModel
 from models.city import City
-from models.place import Place
+from models.amenity import Amenity
 from models.review import Review
-from models.state import State
 from models.user import User
-import shlex  # for splitting the line along spaces except in double quotes
-
-classes = {"Amenity": Amenity, "BaseModel": BaseModel, "City": City,
-           "Place": Place, "Review": Review, "State": State, "User": User}
+from models.place import Place
+from models.state import State
+import cmd
+import re
+from models import storage
 
 
 class HBNBCommand(cmd.Cmd):
-    """ HBNH console """
-    prompt = '(hbnb) '
+    """The class definition HBNBCommand"""
 
-    def do_EOF(self, arg):
-        """Exits console"""
-        return True
+    prompt = '(hbnb) '
+    classes = {
+        'BaseModel': BaseModel,
+        'User': User,
+        'Place': Place,
+        'State': State,
+        'City': City,
+        'Amenity': Amenity,
+        'Review': Review
+        }
+
+    objs = storage.all()
+    Dict_Check = 0
+
+    def precmd(self, line):
+        """parses input"""
+
+        if '.' in line:
+            if '{' in line or '}' in line:
+                self.Dict_Check = quit
+            else:
+                self.Dict_Check = 0
+
+            _delim = '.(", :){}'
+            GetInput = re.split('[{}]+'.format(re.escape(_delim)), line)
+            Res = GetInput[1]
+
+            for i in range(len(GetInput) - 1):
+                if i != 1:
+                    Res += " " + GetInput[i].strip("'")
+
+            return Res
+        else:
+            return line
 
     def emptyline(self):
-        """ overwriting the emptyline method """
-        return False
+        """Handle the empty line"""
+        pass
 
-    def do_quit(self, arg):
-        """Quit command to exit the program"""
+    def do_quit(self, line):
+        """Exit the program with Quit command"""
         return True
 
-    def _key_value_parser(self, args):
-        """creates a dictionary from a list of strings"""
-        new_dict = {}
-        for arg in args:
-            if "=" in arg:
-                kvp = arg.split('=', 1)
-                key = kvp[0]
-                value = kvp[1]
-                if value[0] == value[-1] == '"':
-                    value = shlex.split(value)[0].replace('_', ' ')
-                else:
-                    try:
-                        value = int(value)
-                    except:
-                        try:
-                            value = float(value)
-                        except:
-                            continue
-                new_dict[key] = value
-        return new_dict
+    def do_EOF(self, line):
+        """Exit the program with EOF (ctrl+D) command"""
+        return True
 
-    def do_create(self, arg):
-        """Creates a new instance of a class"""
-        args = arg.split()
-        if len(args) == 0:
+    def do_create(self, line):
+        """Creates a new instance of a BaseModel class,
+        saves it (to the JSON file) and prints the id.
+        Ex: $ create BaseModel
+        """
+
+        if not line:
             print("** class name missing **")
-            return False
-        if args[0] in classes:
-            new_dict = self._key_value_parser(args[1:])
-            instance = classes[args[0]](**new_dict)
-        else:
+        elif line not in self.classes.keys():
             print("** class doesn't exist **")
-            return False
-        print(instance.id)
-        instance.save()
+        else:
+            NewInstance = self.classes[line]()
+            NewInstance.save()
+            print(NewInstance.id)
 
-    def do_show(self, arg):
-        """Prints an instance as a string based on the class and id"""
-        args = shlex.split(arg)
-        if len(args) == 0:
+    def do_show(self, line):
+        """Prints the string representation of an
+        instance based on the class name and id.
+        Ex: $ show BaseModel 1234-1234-1234.
+        """
+
+        if not line:
             print("** class name missing **")
-            return False
-        if args[0] in classes:
-            if len(args) > 1:
-                key = args[0] + "." + args[1]
-                if key in models.storage.all():
-                    print(models.storage.all()[key])
+        else:
+            _Args = line.split()
+
+            if _Args[0] not in self.classes.keys():
+                print("** class doesn't exist **")
+            elif len(_Args) < 2:
+                print("** instance id missing **")
+            else:
+                key = f"{_Args[0]}.{_Args[1]}"
+                if key in self.objs.keys():
+                    print(self.objs[key])
                 else:
                     print("** no instance found **")
-            else:
-                print("** instance id missing **")
-        else:
-            print("** class doesn't exist **")
 
-    def do_destroy(self, arg):
-        """Deletes an instance based on the class and id"""
-        args = shlex.split(arg)
-        if len(args) == 0:
+    def do_destroy(self, line):
+        """
+        Deletes an instance based on the class name and
+        id (save the change into the JSON file).
+        Ex: $ destroy BaseModel 1234-1234-1234.
+        """
+
+        if not line:
             print("** class name missing **")
-        elif args[0] in classes:
-            if len(args) > 1:
-                key = args[0] + "." + args[1]
-                if key in models.storage.all():
-                    models.storage.all().pop(key)
-                    models.storage.save()
+        else:
+            _Args = line.split()
+
+            if _Args[0] not in self.classes.keys():
+                print("** class doesn't exist **")
+            elif len(_Args) < 2:
+                print("** instance id missing **")
+            else:
+                key = f"{_Args[0]}.{_Args[1]}"
+                if key in self.objs.keys():
+                    del self.objs[key]
                 else:
                     print("** no instance found **")
+
+    def do_all(self, line):
+        """
+        Prints all string representation of all instances
+        based or not on the class name.
+        Ex: $ all BaseModel or $ all.
+        """
+
+        Obj_List = []
+        if not line:
+            Obj_List = [obj.__str__() for obj in self.objs.values()]
+            print(Obj_List)
+        else:
+            if line not in self.classes.keys():
+                print("** class doesn't exist **")
             else:
-                print("** instance id missing **")
-        else:
-            print("** class doesn't exist **")
+                Obj_List = [
+                        obj.__str__() for obj in self.objs.values()
+                        if obj.__class__.__name__ == line
+                        ]
+                print(Obj_List)
 
-    def do_all(self, arg):
-        """Prints string representations of instances"""
-        args = shlex.split(arg)
-        obj_list = []
-        if len(args) == 0:
-            obj_dict = models.storage.all()
-        elif args[0] in classes:
-            obj_dict = models.storage.all(classes[args[0]])
-        else:
-            print("** class doesn't exist **")
-            return False
-        for key in obj_dict:
-            obj_list.append(str(obj_dict[key]))
-        print("[", end="")
-        print(", ".join(obj_list), end="")
-        print("]")
+    def do_update(self, line):
+        """
+        Updates an instance based on the class name and id by adding or
+        updating attribute (save the change into the JSON file).
+        Ex: $ update BaseModel 1234-1234-1234 email "aibnb@mail.com.
+        """
 
-    def do_update(self, arg):
-        """Update an instance based on the class name, id, attribute & value"""
-        args = shlex.split(arg)
-        integers = ["number_rooms", "number_bathrooms", "max_guest",
-                    "price_by_night"]
-        floats = ["latitude", "longitude"]
-        if len(args) == 0:
-            print("** class name missing **")
-        elif args[0] in classes:
-            if len(args) > 1:
-                k = args[0] + "." + args[1]
-                if k in models.storage.all():
-                    if len(args) > 2:
-                        if len(args) > 3:
-                            if args[0] == "Place":
-                                if args[2] in integers:
-                                    try:
-                                        args[3] = int(args[3])
-                                    except:
-                                        args[3] = 0
-                                elif args[2] in floats:
-                                    try:
-                                        args[3] = float(args[3])
-                                    except:
-                                        args[3] = 0.0
-                            setattr(models.storage.all()[k], args[2], args[3])
-                            models.storage.all()[k].save()
-                        else:
-                            print("** value missing **")
+        _ARGS = line.split()
+
+        if len(_ARGS) >= 4:
+            if _ARGS[0] not in self.classes.keys():
+                print("** class doesn't exist **")
+            else:
+                key = f"{_ARGS[0]}.{_ARGS[1]}"
+
+                if key in self.objs.keys():
+                    if self.Dict_Check == 1:
+                        for j in range(2, len(_ARGS), 2):
+                            setattr(self.objs[key], _ARGS[j], _ARGS[j + 1])
                     else:
-                        print("** attribute name missing **")
+                        _ARGS[2] = _ARGS[2].strip('"')
+                        _ARGS[3] = _ARGS[3].strip('"')
+                        setattr(self.objs[key], _ARGS[2], _ARGS[3])
+                    self.objs[key].save()
                 else:
                     print("** no instance found **")
-            else:
-                print("** instance id missing **")
+        elif len(_ARGS) == 3:
+            print("** value missing **")
+        elif len(_ARGS) == 2:
+            print("** attribute name missing **")
+        elif len(_ARGS) == 1:
+            print("** instance id missing **")
         else:
-            print("** class doesn't exist **")
+            print("** class name missing **")
+
+        self.Dict_Check = 0
+
+    def do_count(self, line):
+        """Retrieve the number of instances of a class."""
+        count = 0
+
+        for obj in self.objs.values():
+            if obj.__class__.__name__ == line:
+                count += 1
+
+        print(count)
+
 
 if __name__ == '__main__':
     HBNBCommand().cmdloop()
